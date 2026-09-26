@@ -1,10 +1,12 @@
 import { createServer } from 'node:http';
+import dns from 'node:dns';
 import mongoose from 'mongoose';
 import { createApp } from './app.js';
 import { connectDatabase } from './config/database.js';
 import { env } from './config/env.js';
 import { attachSockets } from './sockets/index.js';
 
+if (env.DNS_SERVERS) dns.setServers(env.DNS_SERVERS.split(',').map(value => value.trim()).filter(Boolean));
 await connectDatabase();
 const app = createApp();
 const server = createServer(app);

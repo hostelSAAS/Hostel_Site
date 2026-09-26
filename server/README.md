@@ -10,11 +10,25 @@ Run `npm run dev` (port 5000). In each `client`, run `npm ci`, copy `.env.exampl
 
 `GET /api/health` returns 200 when MongoDB is connected, otherwise 503. Missing or invalid required environment variables prevent startup.
 
-## Deployment
+## Deploying owner registration
 
-Keep the two existing Vercel projects building `client` with `npm run build`, output `dist`. Set both projects' `VITE_API_URL=https://api.your-domain/api` and `VITE_SOCKET_URL=https://api.your-domain`, then rebuild them. Their current UI screens still use mock state; the provided `client/src/services/api.js` is the integration boundary for the next frontend phase, not a claim that every screen is connected.
+Owner registration and login use the API, so registration from the Vercel site works once the public API and the environment variables below are configured. The account, profile fields, password hash, and session are written to the MongoDB database selected by the API's `MONGODB_URI`. The rest of the dashboard still contains mock presentation data.
 
-Deploy `server` once as a persistent Node service: install `npm ci --omit=dev`, run `npm start`, set `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, Cloudinary credentials, and both frontend origins in `CLIENT_URL`. Terminate TLS at the host. Set `TRUST_PROXY` to the actual trusted proxy-hop count (0 by default); do not set it blindly when the server is directly accessible.
+Deploy `server` once as a publicly reachable persistent Node service. Install with `npm ci --omit=dev` and run `npm start`. Configure these environment variables on that API host:
+
+- `NODE_ENV=production`
+- `MONGODB_URI`: the Atlas connection string
+- `JWT_SECRET`: a unique random secret of at least 32 characters
+- `CLIENT_URL`: the exact Vercel site origin, including `https://` and no path (for example `https://hostelhub.vercel.app`). Add more exact origins as a comma-separated list if needed. Vercel preview URLs must also be listed if those previews should allow login and registration.
+- `COOKIE_SAME_SITE=none` when the Vercel and API hostnames are on different sites; production then uses secure cookies. If they are custom subdomains on the same site, `lax` can be used.
+- Cloudinary credentials if image upload is enabled
+- `TRUST_PROXY`: the actual trusted proxy-hop count for the API host (0 by default)
+
+On the Vercel client project, set `VITE_API_URL` to the public API origin plus `/api`, for example `https://api.example.com/api`. Set `VITE_SOCKET_URL` to the API origin, for example `https://api.example.com`. Redeploy the client after changing either variable; Vite embeds these values during the build. Never put `MONGODB_URI` or `JWT_SECRET` in Vercel's client environment variables.
+
+In MongoDB Atlas, add the API host's outbound IP address to Network Access. The Vercel browser talks to the API; it does not connect directly to Atlas. After deployment, verify `https://<api-host>/api/health` returns `{"data":{"status":"ok"}}`, then try registration from the Vercel site.
+
+Terminate TLS at the API host. Keep both API and client on HTTPS in production. This API uses credentialed CORS and an exact `CLIENT_URL` origin allowlist; the existing auth client sends cookies and the required request header.
 
 Prefer frontend and API custom subdomains under one site, e.g. `app.example.com`, `owner.example.com`, and `api.example.com`, with `COOKIE_SAME_SITE=lax`. If using unrelated domains, set `COOKIE_SAME_SITE=none` (requires HTTPS). Browsers that block third-party cookies can still block those sessions; custom domains or a same-origin proxy are needed for reliable authentication. Cookies are host-only, HTTP-only, secure in production, and expire after one day.
 
@@ -85,7 +99,7 @@ History returns messages oldest-to-newest within a page, with `nextCursor` for o
 
 ## Seed and tests
 
-Set `SEED_PASSWORD` to a password of 10-72 bytes and run `npm run seed`. This adds `student@example.com`, `owner@example.com`, and `admin@example.com`, demo listings, a favorite and a conversation. Existing accounts/passwords are unchanged; seeding never wipes the database and is disabled in production. Demo listings intentionally have no Cloudinary uploads.
+Run `npm run seed` to add `student`, `owner`, and `admin` demo usernames, demo listings, a favorite and a conversation. Locally the password defaults to `Password123!`; set `SEED_PASSWORD` to a password of 10-72 bytes to override it. Existing accounts/passwords are unchanged; seeding never wipes the database and is disabled in production. Demo listings intentionally have no Cloudinary uploads.
 
 `npm test` launches an isolated temporary MongoDB server and exercises cookies, session revocation, role escalation rejection, CSRF, owner isolation, moderation, search, favorites, private chat, unread counts/read receipts, real Socket.IO delivery, user suspension, and image validation. The first run downloads a MongoDB binary and needs network access. Cloudinary success paths require real credentials and are not covered by live integration tests.
 
