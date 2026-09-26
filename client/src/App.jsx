@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useEffect } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import {
   ArrowRight,
@@ -29,6 +30,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { api, authApi } from './services/api'
 
 const listingImages = [
   'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=900&q=85',
@@ -58,8 +60,8 @@ function Logo() {
   return <div className="flex items-center gap-2.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-zinc-950 text-sm font-bold text-white">H</span><div><p className="text-[14px] font-semibold tracking-tight text-zinc-950">hostel<span className="text-zinc-400">hub</span></p><p className="text-[9px] font-semibold uppercase tracking-[.18em] text-zinc-400">Owner portal</p></div></div>
 }
 
-function Sidebar({ open, onClose }) {
-  return <><button aria-label="Close navigation" onClick={onClose} className={cn('fixed inset-0 z-40 bg-zinc-950/20 backdrop-blur-sm lg:hidden', open ? 'block' : 'hidden')} /><aside className={cn('fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col border-r border-zinc-200 bg-white p-4 transition-transform lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}><div className="flex h-14 items-center justify-between px-2"><Logo /><button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg bg-zinc-100 text-zinc-500 lg:hidden"><X size={16} /></button></div><div className="mt-7 rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Listing status</span><span className="h-2 w-2 rounded-full bg-emerald-500" /></div><p className="mt-2 text-xs font-semibold text-zinc-800">The Olive House</p><p className="mt-1 text-[10px] text-zinc-400">Live · Approved</p></div><nav className="mt-6 grid gap-1">{navItems.map(({ to, label, icon: Icon, badge }) => <NavLink key={to} to={to} onClick={onClose} className={({ isActive }) => cn('flex h-11 items-center gap-3 rounded-xl px-3 text-xs font-medium transition', isActive ? 'bg-zinc-950 text-white' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950')}><Icon size={16} /><span className="flex-1">{label}</span>{badge && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white px-1 text-[9px] font-bold text-zinc-950">{badge}</span>}</NavLink>)}</nav><div className="mt-auto border-t border-zinc-100 pt-4"><button className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium text-zinc-400 transition hover:bg-zinc-50 hover:text-zinc-700"><Settings size={15} />Settings</button><button className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium text-zinc-400 transition hover:bg-zinc-50 hover:text-zinc-700"><LogOut size={15} />Sign out</button></div></aside></>
+function Sidebar({ open, onClose, onSignOut }) {
+  return <><button aria-label="Close navigation" onClick={onClose} className={cn('fixed inset-0 z-40 bg-zinc-950/20 backdrop-blur-sm lg:hidden', open ? 'block' : 'hidden')} /><aside className={cn('fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col border-r border-zinc-200 bg-white p-4 transition-transform lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}><div className="flex h-14 items-center justify-between px-2"><Logo /><button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg bg-zinc-100 text-zinc-500 lg:hidden"><X size={16} /></button></div><div className="mt-7 rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Listing status</span><span className="h-2 w-2 rounded-full bg-emerald-500" /></div><p className="mt-2 text-xs font-semibold text-zinc-800">The Olive House</p><p className="mt-1 text-[10px] text-zinc-400">Live · Approved</p></div><nav className="mt-6 grid gap-1">{navItems.map(({ to, label, icon: Icon, badge }) => <NavLink key={to} to={to} onClick={onClose} className={({ isActive }) => cn('flex h-11 items-center gap-3 rounded-xl px-3 text-xs font-medium transition', isActive ? 'bg-zinc-950 text-white' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950')}><Icon size={16} /><span className="flex-1">{label}</span>{badge && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-white px-1 text-[9px] font-bold text-zinc-950">{badge}</span>}</NavLink>)}</nav><div className="mt-auto border-t border-zinc-100 pt-4"><button className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium text-zinc-400 transition hover:bg-zinc-50 hover:text-zinc-700"><Settings size={15} />Settings</button><button onClick={onSignOut} className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-medium text-zinc-400 transition hover:bg-zinc-50 hover:text-zinc-700"><LogOut size={15} />Sign out</button></div></aside></>
 }
 
 function Header({ onMenu }) {
@@ -68,9 +70,9 @@ function Header({ onMenu }) {
   return <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b border-zinc-200 bg-[#f7f7f7]/90 px-5 backdrop-blur-xl lg:px-8"><div className="flex items-center gap-3"><button onClick={onMenu} className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-600 lg:hidden"><Menu size={18} /></button><div><p className="text-[10px] font-medium text-zinc-400">Workspace</p><p className="text-sm font-semibold text-zinc-800">{current?.label || 'Owner portal'}</p></div></div><div className="flex items-center gap-2"><button className="grid h-10 w-10 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500"><Bell size={16} /></button><button className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white py-1.5 pl-1.5 pr-3"><span className="grid h-7 w-7 place-items-center rounded-lg bg-zinc-950 text-[10px] font-semibold text-white">AM</span><span className="hidden text-xs font-semibold text-zinc-700 sm:block">Areeba Malik</span><ChevronDown size={13} className="text-zinc-400" /></button></div></header>
 }
 
-function Shell({ children }) {
+function Shell({ children, onSignOut }) {
   const [open, setOpen] = useState(false)
-  return <div className="min-h-screen bg-[#f7f7f7]"><Sidebar open={open} onClose={() => setOpen(false)} /><div className="lg:pl-[260px]"><Header onMenu={() => setOpen(true)} />{children}</div></div>
+  return <div className="min-h-screen bg-[#f7f7f7]"><Sidebar open={open} onClose={() => setOpen(false)} onSignOut={onSignOut} /><div className="lg:pl-[260px]"><Header onMenu={() => setOpen(true)} />{children}</div></div>
 }
 
 function PageHeading({ eyebrow, title, description, action }) {
@@ -123,8 +125,65 @@ function Profile() {
   return <main className="mx-auto max-w-[1000px] p-5 lg:p-8"><PageHeading eyebrow="Account" title="Owner profile." description="Keep your contact and verification details up to date." action={<button onClick={() => setSaved(true)} className="inline-flex h-11 items-center gap-2 self-start rounded-xl bg-zinc-950 px-4 text-xs font-semibold text-white">{saved && <Check size={14} />}{saved ? 'Changes saved' : 'Save changes'}</button>} /><div className="mt-7 grid gap-5"><section className="rounded-2xl border border-zinc-200 bg-white p-6"><div className="flex items-center gap-4"><span className="grid h-16 w-16 place-items-center rounded-2xl bg-zinc-950 text-lg font-semibold text-white">AM</span><div><h2 className="text-sm font-semibold text-zinc-900">Areeba Malik</h2><p className="mt-1 text-xs text-zinc-400">Property owner</p><button className="mt-2 text-[11px] font-semibold text-zinc-600">Change photo</button></div><span className="ml-auto hidden items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 sm:flex"><CheckCircle2 size={13} /> Identity verified</span></div></section><section className="rounded-2xl border border-zinc-200 bg-white p-6"><div className="mb-6"><h2 className="text-sm font-semibold text-zinc-900">Personal information</h2><p className="mt-1 text-xs text-zinc-400">Used for account and student communication.</p></div><div className="grid gap-4 sm:grid-cols-2"><label className="field"><span>First name</span><input className="input" defaultValue="Areeba" /></label><label className="field"><span>Last name</span><input className="input" defaultValue="Malik" /></label><label className="field"><span>Email address</span><input className="input" type="email" defaultValue="areeba@example.com" /></label><label className="field"><span>Phone number</span><input className="input" defaultValue="+92 300 1234567" /></label><label className="field sm:col-span-2"><span>CNIC number</span><input className="input" defaultValue="35202-•••••••-4" disabled /></label></div></section></div></main>
 }
 
+function AccountEntry({ onAuthenticated }) {
+  const [mode, setMode] = useState('choose')
+  const [form, setForm] = useState({ username: '', firstName: '', lastName: '', phone: '', email: '', password: '', confirmPassword: '' })
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [usernameState, setUsernameState] = useState('')
+  const update = key => event => { setForm(current => ({ ...current, [key]: event.target.value })); if (key === 'username') setUsernameState('') }
+  async function checkUsername() {
+    const value = form.username.trim().toLowerCase()
+    if (!/^[a-z0-9_]{3,24}$/.test(value)) { setUsernameState(value ? 'Use 3–24 letters, numbers, or underscores.' : ''); return }
+    try {
+      const result = await api(`/auth/username-available?username=${encodeURIComponent(value)}`)
+      setUsernameState(result.data.available ? 'Username is available.' : 'That username is taken. Please choose another username.')
+    } catch { setUsernameState('Could not check username. Try again.') }
+  }
+  async function submit(event) {
+    event.preventDefault(); setError('')
+    if (mode === 'register' && form.password !== form.confirmPassword) { setError('Passwords do not match.'); return }
+    if (mode === 'register' && usernameState.includes('taken')) { setError('That username is taken. Please choose another username.'); return }
+    setBusy(true)
+    try {
+      const response = mode === 'login'
+        ? await authApi.login({ username: form.username.trim(), password: form.password })
+        : await authApi.register({ username: form.username.trim(), firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone.trim(), email: form.email.trim(), password: form.password, role: 'OWNER' })
+      onAuthenticated(response.data)
+    } catch (cause) {
+      setError(cause.status === 409 ? 'That username or email is already registered. Please choose another username or use the login page.' : cause.message || 'Something went wrong. Please try again.')
+      if (cause.status === 409) setUsernameState('That username is taken. Please choose another username.')
+    } finally { setBusy(false) }
+  }
+  const inputClass = 'input'
+  return <div className="min-h-screen bg-white lg:grid lg:grid-cols-[1fr_1fr]">
+    <section className="hidden min-h-screen flex-col justify-between bg-zinc-950 p-12 text-white lg:flex"><Logo /><div className="max-w-lg"><p className="text-xs font-semibold uppercase tracking-[.2em] text-zinc-400">HostelHub · Owner portal</p><h1 className="mt-5 text-5xl font-semibold leading-tight tracking-[-.05em]">A better home for your hostel business.</h1><p className="mt-5 max-w-md text-sm leading-7 text-zinc-400">Manage your listing, connect with students, and keep everything in one place.</p></div><p className="text-xs text-zinc-500">Your property, your workspace.</p></section>
+    <main className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10"><div className="w-full max-w-[440px]">
+      <div className="mb-10 lg:hidden"><Logo /></div>
+      {mode === 'choose' ? <><p className="eyebrow">Welcome to HostelHub</p><h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950">Owner portal access</h2><p className="mt-3 text-sm leading-6 text-zinc-500">Log in to manage your hostel or create an owner account to get started.</p><div className="mt-8 grid gap-3"><button onClick={() => setMode('login')} className="flex h-14 items-center justify-between rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white">Log in <ArrowRight size={17} /></button><button onClick={() => setMode('register')} className="flex h-14 items-center justify-between rounded-xl border border-zinc-200 bg-white px-5 text-sm font-semibold text-zinc-800">Register as an owner <ArrowRight size={17} /></button></div></> : <>
+        <button onClick={() => { setMode('choose'); setError(''); setUsernameState('') }} className="mb-7 text-xs font-medium text-zinc-500 hover:text-zinc-950">← Back</button>
+        <p className="eyebrow">{mode === 'register' ? 'Create your account' : 'Welcome back'}</p><h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950">{mode === 'register' ? 'Register as an owner.' : 'Log in to your account.'}</h2><p className="mt-2 text-sm text-zinc-500">{mode === 'register' ? 'Tell us about yourself to set up your owner profile.' : 'Enter your username and password to continue.'}</p>
+        <form onSubmit={submit} className="mt-7 grid gap-4">
+          <label className="field"><span>Username</span><input className={inputClass} autoComplete="username" required minLength="3" maxLength="24" value={form.username} onChange={update('username')} onBlur={mode === 'register' ? checkUsername : undefined} placeholder="e.g. areeba_malik" />{mode === 'register' && usernameState && <small className={usernameState.includes('available') ? 'text-emerald-700' : 'text-rose-600'}>{usernameState}</small>}</label>
+          {mode === 'register' && <><div className="grid grid-cols-2 gap-3"><label className="field"><span>First name</span><input className={inputClass} autoComplete="given-name" required maxLength="60" value={form.firstName} onChange={update('firstName')} /></label><label className="field"><span>Last name</span><input className={inputClass} autoComplete="family-name" required maxLength="60" value={form.lastName} onChange={update('lastName')} /></label></div><label className="field"><span>Phone number</span><input className={inputClass} type="tel" autoComplete="tel" required maxLength="30" value={form.phone} onChange={update('phone')} /></label><label className="field"><span>Email address</span><input className={inputClass} type="email" autoComplete="email" required value={form.email} onChange={update('email')} /></label></>}
+          <label className="field"><span>Password</span><input className={inputClass} type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} required minLength={mode === 'register' ? 10 : 1} value={form.password} onChange={update('password')} /></label>
+          {mode === 'register' && <label className="field"><span>Confirm password</span><input className={inputClass} type="password" autoComplete="new-password" required value={form.confirmPassword} onChange={update('confirmPassword')} /></label>}
+          {error && <p role="alert" className="rounded-xl bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">{error}</p>}
+          <button disabled={busy} className="mt-1 flex h-12 items-center justify-center gap-2 rounded-xl bg-zinc-950 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Please wait…' : mode === 'register' ? 'Create owner account' : 'Log in'} {!busy && <ArrowRight size={16} />}</button>
+        </form><p className="mt-6 text-center text-xs text-zinc-500">{mode === 'register' ? 'Already have an account?' : 'New to HostelHub?'} <button onClick={() => { setMode(mode === 'register' ? 'login' : 'register'); setError(''); setUsernameState('') }} className="font-semibold text-zinc-950">{mode === 'register' ? 'Log in' : 'Register'}</button></p>
+      </>}
+    </div></main>
+  </div>
+}
+
 function NotFound() { return <main className="grid min-h-[70vh] place-items-center p-6 text-center"><div><p className="eyebrow">404</p><h1 className="page-title mt-2">Page not found.</h1><NavLink to="/dashboard" className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-zinc-950 px-4 text-xs font-semibold text-white">Back to overview <ArrowRight size={14} /></NavLink></div></main> }
 
 export default function App() {
-  return <Shell><Routes><Route path="/" element={<Navigate to="/dashboard" replace />} /><Route path="/dashboard" element={<Dashboard />} /><Route path="/hostel" element={<HostelEditor />} /><Route path="/messages" element={<Messages />} /><Route path="/subscription" element={<Subscription />} /><Route path="/profile" element={<Profile />} /><Route path="*" element={<NotFound />} /></Routes></Shell>
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { authApi.me().then(result => setUser(result.data)).catch(() => setUser(null)).finally(() => setLoading(false)) }, [])
+  async function signOut() { try { await authApi.logout() } finally { setUser(null) } }
+  if (loading) return <div className="grid min-h-screen place-items-center bg-white text-sm text-zinc-400">Loading your workspace…</div>
+  if (!user) return <AccountEntry onAuthenticated={setUser} />
+  return <Shell onSignOut={signOut}><Routes><Route path="/" element={<Navigate to="/dashboard" replace />} /><Route path="/dashboard" element={<Dashboard />} /><Route path="/hostel" element={<HostelEditor />} /><Route path="/messages" element={<Messages />} /><Route path="/subscription" element={<Subscription />} /><Route path="/profile" element={<Profile />} /><Route path="*" element={<NotFound />} /></Routes></Shell>
 }

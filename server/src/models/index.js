@@ -4,12 +4,17 @@ const ref = (name) => ({ type: Schema.Types.ObjectId, ref: name, required: true 
 
 const userSchema = new Schema({
   name: { type: String, required: true, trim: true },
+  firstName: { type: String, trim: true },
+  lastName: { type: String, trim: true },
+  phone: { type: String, trim: true },
+  username: { type: String, lowercase: true, trim: true, match: /^[a-z0-9_]{3,24}$/ },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true, select: false },
   role: { type: String, enum: ['STUDENT', 'OWNER', 'ADMIN'], required: true },
   active: { type: Boolean, default: true },
   favorites: [{ type: Schema.Types.ObjectId, ref: 'Hostel' }],
 }, { timestamps: true });
+userSchema.index({ username: 1 }, { unique: true, sparse: true });
 export const User = model('User', userSchema);
 
 const hostelSchema = new Schema({
