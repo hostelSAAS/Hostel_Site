@@ -1,4 +1,5 @@
-const baseURL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '')
+const defaultApiURL = import.meta.env.PROD ? '/api' : 'http://localhost:5000/api'
+const baseURL = (import.meta.env.VITE_API_URL || defaultApiURL).replace(/\/$/, '')
 
 // Cookies remain HTTP-only. Callers handle loading/error state and 401 redirects.
 export async function api(path, { method = 'GET', body, signal } = {}) {

@@ -14,7 +14,7 @@ Run `npm run dev` (port 5000). In each `client`, run `npm ci`, copy `.env.exampl
 
 Owner registration and login use the API, so registration from the Vercel site works once the public API and the environment variables below are configured. The account, profile fields, password hash, and session are written to the MongoDB database selected by the API's `MONGODB_URI`. The rest of the dashboard still contains mock presentation data.
 
-Deploy `server` once as a publicly reachable persistent Node service. Install with `npm ci --omit=dev` and run `npm start`. Configure these environment variables on that API host:
+Create a second Vercel project using the same repository as the frontend and set its **Root Directory** to `server`. The `src/index.js` Express app is also exported for Vercel Functions; local development still starts the regular Node server. Vercel detects the Express app automatically. Set the project’s Node.js version to 22.x or newer. Configure these environment variables on the API project:
 
 - `NODE_ENV=production`
 - `MONGODB_URI`: the Atlas connection string
@@ -24,15 +24,15 @@ Deploy `server` once as a publicly reachable persistent Node service. Install wi
 - Cloudinary credentials if image upload is enabled
 - `TRUST_PROXY`: the actual trusted proxy-hop count for the API host (0 by default)
 
-On the Vercel client project, set `VITE_API_URL` to the public API origin plus `/api`, for example `https://api.example.com/api`. Set `VITE_SOCKET_URL` to the API origin, for example `https://api.example.com`. Redeploy the client after changing either variable; Vite embeds these values during the build. Never put `MONGODB_URI` or `JWT_SECRET` in Vercel's client environment variables.
+After the API project deploys, copy its production URL. On the Vercel client project, set `VITE_API_URL` to that API URL plus `/api`, for example `https://hostelhub-api.vercel.app/api`. Set `VITE_SOCKET_URL` to the API origin, for example `https://hostelhub-api.vercel.app`. Redeploy the client after changing either variable; Vite embeds these values during the build. Never put `MONGODB_URI` or `JWT_SECRET` in Vercel's client environment variables.
 
-In MongoDB Atlas, add the API host's outbound IP address to Network Access. The Vercel browser talks to the API; it does not connect directly to Atlas. After deployment, verify `https://<api-host>/api/health` returns `{"data":{"status":"ok"}}`, then try registration from the Vercel site.
+In MongoDB Atlas, allow the API host's outbound connections in Network Access. Vercel Functions use dynamic outbound IP addresses unless static egress is configured, so a fixed local IP allowlist will not work for them. The Vercel browser talks to the API; it does not connect directly to Atlas. After deployment, verify `https://<api-host>/api/health` returns `{"data":{"status":"ok"}}`, then try registration from the Vercel site.
 
 Terminate TLS at the API host. Keep both API and client on HTTPS in production. This API uses credentialed CORS and an exact `CLIENT_URL` origin allowlist; the existing auth client sends cookies and the required request header.
 
 Prefer frontend and API custom subdomains under one site, e.g. `app.example.com`, `owner.example.com`, and `api.example.com`, with `COOKIE_SAME_SITE=lax`. If using unrelated domains, set `COOKIE_SAME_SITE=none` (requires HTTPS). Browsers that block third-party cookies can still block those sessions; custom domains or a same-origin proxy are needed for reliable authentication. Cookies are host-only, HTTP-only, secure in production, and expire after one day.
 
-This implementation targets one persistent backend process. Before running multiple replicas, add a Socket.IO shared adapter, a shared rate-limit store, and cross-process session-disconnect coordination. Vercel now documents WebSocket beta support, but function instances need external room/pub-sub coordination and reconnect handling: [Vercel WebSockets](https://vercel.com/docs/functions/websockets). This repository does not include a Vercel Functions adapter; the existing frontend deployments are unaffected.
+The HTTP API supports Vercel Functions. Socket.IO real-time delivery still requires a persistent backend and is not enabled by the Vercel Function entrypoint; chat REST endpoints remain available.
 
 ## Authentication and security
 
