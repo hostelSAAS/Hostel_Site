@@ -1,6 +1,6 @@
 # HostelHub shared API
 
-One Express/Mongoose API serves STUDENT, OWNER, and ADMIN roles. Both frontend deployments use the same API and MongoDB database. `main` contains the student/admin UI; `master` contains the owner UI. Keep `/server` identical across branches and deploy it from **one** designated branch (recommended: `main`). Splitting backend services by frontend branch would duplicate authentication, data, and moderation logic.
+One Express/Mongoose API serves STUDENT, OWNER, and ADMIN roles. Both frontend deployments use the same API and MongoDB database. `main` is deployed as the admin portal; `master` is deployed as the owner/customer portal. Keep `/server` identical across branches and deploy it from **one** designated branch (recommended: `main`). Splitting backend services by frontend branch would duplicate authentication, data, and moderation logic.
 
 ## Local setup
 
