@@ -4,7 +4,7 @@ import { env, cookieOptions } from '../config/env.js';
 import { Session, User } from '../models/index.js';
 import { HttpError } from '../middleware/http.js';
 
-export const publicUser = user => ({ id: user.id, name: user.name, firstName: user.firstName, lastName: user.lastName, phone: user.phone, username: user.username, email: user.email, role: user.role, active: user.active });
+export const publicUser = user => ({ id: user.id, name: user.name, firstName: user.firstName, lastName: user.lastName, phone: user.phone, username: user.username, email: user.email, role: user.role, active: user.active, ...(user.role === 'STUDENT' && { favoriteIds: user.favorites.map(String) }) });
 export async function createSession(user, res) {
   const sessionId = randomUUID();
   await Session.create({ _id: sessionId, user: user._id, expiresAt: new Date(Date.now() + 86400000) });

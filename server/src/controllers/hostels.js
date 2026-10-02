@@ -1,4 +1,4 @@
-import { Hostel, User } from '../models/index.js';
+import { Hostel, User, Conversation, Message } from '../models/index.js';
 import { HttpError } from '../middleware/http.js';
 import { ownedHostel, requireEditable, resetReview } from '../services/hostels.js';
 
@@ -21,7 +21,17 @@ export async function detail(req, res) {
 }
 export async function mine(req, res) {
   const { page, limit } = req.validated.query;
-  res.json({ data: await Hostel.find({ owner: req.user._id, deletedAt: null }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit) });
+  const filter = { owner: req.user._id, deletedAt: null };
+  const [data, total] = await Promise.all([Hostel.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit), Hostel.countDocuments(filter)]);
+  res.json({ data, pagination: { page, limit, total } });
+}
+export async function summary(req, res) {
+  const [hostels, conversations, unreadMessages] = await Promise.all([
+    Hostel.aggregate([{ $match: { owner: req.user._id, deletedAt: null } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Conversation.countDocuments({ owner: req.user._id }),
+    Message.countDocuments({ recipient: req.user._id, readAt: null }),
+  ]);
+  res.json({ data: { hostels, conversations, unreadMessages } });
 }
 export async function create(req, res) {
   res.status(201).json({ data: await Hostel.create({ ...req.validated.body, owner: req.user._id }) });
@@ -56,5 +66,7 @@ export async function favorite(req, res) {
 }
 export async function favorites(req, res) {
   const { page, limit } = req.validated.query;
-  res.json({ data: await Hostel.find({ _id: { $in: req.user.favorites }, status: 'APPROVED', deletedAt: null }).sort({ _id: -1 }).skip((page - 1) * limit).limit(limit) });
+  const filter = { _id: { $in: req.user.favorites }, status: 'APPROVED', deletedAt: null };
+  const [data, total] = await Promise.all([Hostel.find(filter).sort({ _id: -1 }).skip((page - 1) * limit).limit(limit), Hostel.countDocuments(filter)]);
+  res.json({ data, pagination: { page, limit, total } });
 }

@@ -23,7 +23,8 @@ export async function list(req, res) {
     unreadCount: await Message.countDocuments({ conversation: conversation._id, recipient: req.user._id, readAt: null }),
     lastMessage: await Message.findOne({ conversation: conversation._id }).sort({ _id: -1 }).lean(),
   })));
-  res.json({ data });
+  const total = await Conversation.countDocuments({ $or: [{ student: req.user._id }, { owner: req.user._id }] });
+  res.json({ data, pagination: { page, limit, total } });
 }
 export async function messages(req, res) {
   await conversationFor(req.params.id, req.user);

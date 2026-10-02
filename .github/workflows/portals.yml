@@ -1,0 +1,49 @@
+name: Cross-portal browser verification
+on:
+  workflow_dispatch:
+    inputs:
+      main_ref:
+        description: Student/admin branch or commit
+        default: main
+        required: true
+      owner_ref:
+        description: Owner branch or commit
+        default: master
+        required: true
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.main_ref }}
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.owner_ref }}
+          path: owner
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node owner/scripts/check-shared.mjs owner main
+      - run: npm ci
+        working-directory: owner/server
+      - run: npm ci
+        working-directory: owner/client
+      - run: npm ci
+        working-directory: main/client
+      - run: npx playwright install --with-deps chromium
+        working-directory: owner/server
+      - run: npm run test:browser
+        working-directory: owner/server
+        env:
+          OWNER_WORKTREE: ${{ github.workspace }}/owner
+          MAIN_WORKTREE: ${{ github.workspace }}/main
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-traces
+          path: owner/server/test-results

@@ -1,71 +1,49 @@
 # Hostel Application Plan
 
-## Implementation Status (2026-09-24)
+## Implementation Status (2026-10-01)
 
-The backend phase is implemented locally. The full application is **not yet connected end-to-end**: both React frontends still display dummy/mock data. The requirements below remain the target product specification; the checklist here tracks actual progress.
+The shared MERN API and core frontend flows are connected locally. Production hosting configuration and live Atlas/Cloudinary verification are still required; repository changes alone do not update deployed sites. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
+### Work completed and remaining
+
+Completed: the two portals now share one backend contract and Axios client; authentication, HTTP-only sessions, role guards, student search/details/favorites/profile, owner listings/photos/submission/profile, admin moderation/users/analytics, persistent conversations, Socket.IO updates, loading/error/empty states, Vercel SPA rewrites, production API-URL validation, deployment documentation, Docker support, backend contract tests, client configuration tests, and an isolated cross-portal browser test harness are in place.
+
+Remaining before release: choose and deploy the public API host from `main`; configure MongoDB Atlas network access and credentials, Cloudinary credentials, exact `CLIENT_URL` origins, proxy trust, and production cookie settings; set `VITE_API_URL`, `VITE_SOCKET_URL`, and the owner portal URL in both Vercel projects; rebuild both frontends; run the read-only deployment smoke check; and verify the authenticated student, owner, and admin flows against the live API, Atlas, Cloudinary, HTTPS cookies, and mobile layouts. Keep the shared backend and client modules synchronized between `main` and `master`.
+
+### Session summary
+
+This session traced the deployment failures to a live owner bundle using `http://localhost:5000/api`, missing SPA rewrites, and incompatible username/email authentication contracts between the branches. The shared API was made compatible with both contracts, both portals were connected to the real API, mock student/owner/admin flows were replaced with persisted API-backed behavior, and production configuration now rejects unsafe or missing API URLs. Backend integration tests pass 5/5, client configuration tests pass, and both production builds pass. No production deployment or live database configuration was performed; the remaining release work is listed above.
 
 ### Architecture and Branches
 
 - `main`: student/admin frontend.
 - `master`: standalone owner frontend.
-- Both branches have the same shared Express/Mongoose backend in `/server`. Keep backend changes synchronized; do not split admin and user APIs into separate branch-specific services.
-- Deploy one shared backend and MongoDB database for both Vercel frontend projects. Backend roles and ownership checks control access.
-- The current backend targets a single persistent Node process. Configure both frontend origins in `CLIENT_URL` and point both clients to the same API.
-- Setup, endpoint payloads, deployment constraints, and security details are documented in [server/README.md](server/README.md).
+- Keep `/server` identical across branches and deploy one API from `main`, with one MongoDB database.
+- Retain separate React/Vite clients, shared Axios request/session behavior, HTTP-only cookies and server-enforced role/ownership checks.
+- This backend targets one persistent Node process with both frontend origins explicitly allowed.
 
-### Implemented Backend
+### Completed implementation
 
-- [x] Express REST API with separate configuration, routes, controllers, models, middleware, and services.
-- [x] MongoDB/Mongoose persistence and indexes.
-- [x] Registration/login, bcrypt password hashing, HTTP-only JWT cookies, database-backed session revocation, logout, and current-user/profile endpoints.
-- [x] Server-side STUDENT, OWNER, and ADMIN authorization; public registration cannot create admins.
-- [x] Request validation, centralized errors, exact-origin CORS, CSRF protection for writes, and rate limits.
-- [x] Public approved-listing search/filtering, owner listing management, and favorites.
-- [x] Draft submission and admin approval, rejection, suspension, and restoration; listing/image edits require fresh review.
-- [x] Cloudinary upload integration, image limits and file-signature validation, ordering, cover selection, and deletion.
-- [x] Persistent private conversations/messages, pagination, unread counts, read receipts, and Socket.IO delivery.
-- [x] Admin user listing/suspension and analytics based on stored data.
-- [x] Environment examples, demo seed script, admin provisioning command, and setup/API documentation.
-- [x] Backend integration tests and a GitHub Actions workflow for both branches.
-- [x] Shared client API helper with credentials and required request headers. It currently uses native fetch; the original frontend specification below calls for Axios.
+- [x] Shared email/username authentication contracts, legacy email-account compatibility and role-safe registration.
+- [x] Axios request layer, React session context, login/registration/logout, protected routes and expired-session handling on both portals.
+- [x] Student search/filtering/pagination, listing details, persisted favorites and profile updates.
+- [x] Owner listing creation/editing/deletion, real summary counts, profile updates and moderation feedback.
+- [x] Multipart photo upload, cover selection, ordering, deletion and draft submission controls.
+- [x] Admin moderation queues, approval/rejection/suspension/restoration, user management and database-backed analytics.
+- [x] Persistent conversations/replies on both portals, Socket.IO updates, history reload on reconnect, older history and visible-message read receipts.
+- [x] Loading, empty and error states instead of fabricated records; deferred pages state that features are unavailable.
+- [x] Vercel SPA rewrites and production build validation rejecting missing/local/insecure API URLs.
+- [x] Portable API Dockerfile, deployment runbook and read-only live smoke checker.
+- [x] Backend contract regressions and browser workflow test harness with isolated MongoDB.
 
-### Verification and Limits
+### Verification and remaining release work
 
-- Four backend integration tests passed against an isolated MongoDB instance, including real Socket.IO delivery and authorization/moderation checks.
-- Production builds passed for both existing React frontends; this does not verify frontend/API integration.
-- Shared backend and client helper files were verified identical across the two worktrees.
-- Successful live Cloudinary uploads still need verification with configured credentials.
-- Backend implementation is present in both branch worktrees. A live backend deployment and frontend/API integration remain outstanding; Git publication alone does not complete deployment.
-
-### Next Phase: Replace Dummy Data and Connect Both Frontends
-
-Complete these in order, preserving the existing UI designs:
-
-1. **Authentication foundation on both branches**
-   - Add login/registration forms, session context, initial `/api/auth/me` loading, logout, and role-protected routes.
-   - Use one shared request layer; reconcile the fetch helper with the planned Axios requirement before wiring screens.
-   - Handle expired sessions, validation errors, loading states, and access-denied responses.
-2. **Student flow on main**
-   - Replace mock listings and filters with API search, pagination, and listing details.
-   - Persist favorites and profile changes through the API.
-   - Create conversations from approved hostel listings and load real conversation/message history.
-3. **Owner flow on master**
-   - Load the signed-in owner's actual listings and profile.
-   - Connect listing creation/editing, Cloudinary image upload/order/cover/delete controls, and submission/status feedback.
-   - Replace dashboard placeholders with actual supported data; add scoped endpoints if needed for owner-specific summaries.
-   - Connect incoming conversations and replies.
-4. **Admin flow on main**
-   - Connect listing review queues and approve/reject/suspend/restore actions.
-   - Connect user management and real analytics; enforce role guards in addition to backend checks.
-5. **Real-time UI on both branches**
-   - Connect authenticated Socket.IO clients to message notifications and read receipts.
-   - Reload persistent history on reconnection and mark only displayed messages as read.
-   - Show empty states and errors instead of fabricated messages or fallback dummy records.
-6. **End-to-end verification and deployment**
-   - Verify student registration -> search -> favorite -> chat, owner creation -> upload -> submit -> reply, and admin review -> approval -> user management through the actual UIs.
-   - Verify cross-portal data consistency, mobile behavior, session expiry, and forbidden access.
-   - Configure MongoDB, Cloudinary, API origins, and secure cookie settings. Prefer frontend/API custom subdomains under one site to avoid third-party-cookie restrictions.
-   - Verify live image uploads, then deploy the shared API and configure/rebuild both Vercel frontends.
+- Backend tests cover authentication, CSRF, role/owner isolation, moderation, favorites, chat, sockets and session revocation.
+- Browser tests exercise both frontends against one isolated real API/database; only the external Cloudinary storage boundary is stubbed.
+- Confirm the public API host, deploy the synchronized backend from main and configure both client build environments.
+- Configure Atlas network access for the API host, Cloudinary credentials, exact CLIENT_URL origins and production cookie settings.
+- Verify live Cloudinary uploads, Atlas connectivity, HTTPS cookies and deployed browser flows before calling the release complete.
+- Keep both shared backend and shared client modules synchronized in future changes.
 
 ### Deferred Features
 

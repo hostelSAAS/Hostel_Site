@@ -10,9 +10,13 @@ Run `npm run dev` (port 5000). In each `client`, run `npm ci`, copy `.env.exampl
 
 `GET /api/health` returns 200 when MongoDB is connected, otherwise 503. Missing or invalid required environment variables prevent startup.
 
-## Deploying owner registration
+## Deployment
 
-Owner registration and login use the API, so registration from the Vercel site works once the public API and the environment variables below are configured. The account, profile fields, password hash, and session are written to the MongoDB database selected by the API's `MONGODB_URI`. The rest of the dashboard still contains mock presentation data.
+Follow [the deployment runbook](../DEPLOYMENT.md) for both Vercel projects, the shared API, Docker, production environment checks, and browser verification.
+
+### Owner registration
+
+Owner registration and login use the API, so registration from the Vercel site works once the public API and the environment variables below are configured. The account, profile fields, password hash, and session are written to the MongoDB database selected by the API's `MONGODB_URI`. The owner dashboard, listing editor, photos, profile and conversations now use the shared API.
 
 Create a second Vercel project using the same repository as the frontend and set its **Root Directory** to `server`. The `src/index.js` Express app is also exported for Vercel Functions; local development still starts the regular Node server. Vercel detects the Express app automatically. Set the project’s Node.js version to 22.x or newer. Configure these environment variables on the API project:
 
@@ -44,17 +48,19 @@ JWTs contain an opaque session ID backed by a MongoDB session with a TTL index. 
 
 ## API contract
 
-Success responses use `{ "data": ... }`; paginated public/admin lists additionally provide `{ "pagination": { "page", "limit", "total" } }`. Errors use `{ "error": { "message", "details"? } }`. Deletions, logout, favorites, and marking messages read return 204 without a body. MongoDB records expose `_id`; auth user responses expose `id`. Page size defaults to 20 and is capped at 50.
+Success responses use `{ "data": ... }`; paginated public/admin/owner/favorites/conversation lists additionally provide `{ "pagination": { "page", "limit", "total" } }`. Errors use `{ "error": { "message", "details"? } }`. Deletions, logout, favorites, and marking messages read return 204 without a body. MongoDB records expose `_id`; auth user responses expose `id`. Page size defaults to 20 and is capped at 50.
 
 | Route | Access / payload |
 | --- | --- |
-| `POST /api/auth/register` | `{name,email,password,role: STUDENT or OWNER}`; password 10-72 bytes |
-| `POST /api/auth/login` | `{email,password}` |
+| `POST /api/auth/register` | `{name,email,password,role?}` or `{firstName,lastName,email,password,username?,phone?,role?}`; optional username also works with name; default role STUDENT, OWNER allowed; password 10-72 bytes |
+| `POST /api/auth/login` | `{email,password}` or `{username,password}`; username also accepts an email; supply exactly one identifier |
+| `GET /api/auth/username-available` | `?username=...`; 3-24 letters, numbers or underscores |
 | `POST /api/auth/logout` | Signed-in session |
 | `GET /api/auth/me` | Signed-in user |
-| `PATCH /api/auth/me` | `{name}` |
+| `PATCH /api/auth/me` | `{name,phone?}`; name updates first/last name consistently |
 | `GET /api/hostels` | Public approved listings; `q,city,gender,minPrice,maxPrice,sort,page,limit` |
 | `GET /api/hostels/:id` | Public approved listing |
+| `GET /api/owner/summary` | OWNER; own listing counts by status, conversations and unread messages |
 | `GET /api/owner/hostels` | Owner's non-deleted listings, all statuses; `page,limit` |
 | `POST /api/hostels` | OWNER; listing payload below |
 | `PUT /api/hostels/:id` | Owning OWNER; full listing payload |
@@ -107,4 +113,4 @@ Run `npm run seed` to add `student`, `owner`, and `admin` demo usernames, demo l
 
 `src/config` validates configuration and connects MongoDB; `models` define persistence/indexes; `routes` define API schemas and middleware; `controllers` handle requests; `services` implement session, ownership, image, and chat operations; `middleware` handles authentication, authorization, CSRF, validation, and errors; `sockets` handles live delivery; `seed` provides safe local demo data and admin provisioning.
 
-This is the backend phase. Connecting existing React mock screens, route guards and login forms is still required for the full end-to-end product described in `plan.md`. Password reset/email verification, subscriptions/payments, reports, online presence, persistent audit history, and distributed deployment are not implemented.
+Both frontends now use shared Axios requests, session context and role guards. Student search/details/favorites/profile, owner listings/photos/submission/profile, admin moderation/users/analytics and Socket.IO conversations are connected. Password reset/email verification, subscriptions/payments, reports, online presence, persistent audit history, and distributed deployment are not implemented.

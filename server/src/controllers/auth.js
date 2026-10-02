@@ -8,8 +8,8 @@ export async function register(req, res) {
   const { password, firstName: suppliedFirst, lastName: suppliedLast, phone, username: suppliedUsername, email, role } = req.validated.body;
   const [firstName, ...lastParts] = (suppliedFirst ? `${suppliedFirst} ${suppliedLast}` : req.validated.body.name).trim().split(/\s+/);
   const lastName = suppliedLast || lastParts.join(' ');
-  const username = suppliedUsername || email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 24).padEnd(3, '_');
-  const user = await User.create({ firstName, lastName, name: `${firstName} ${lastName}`, phone, username, email, role, password: await bcrypt.hash(password, 12) });
+  // Legacy email registrations do not reserve a guessed username (local parts collide).
+  const user = await User.create({ firstName, lastName, name: `${firstName} ${lastName}`.trim(), phone, ...(suppliedUsername && { username: suppliedUsername }), email, role, password: await bcrypt.hash(password, 12) });
   await createSession(user, res);
   res.status(201).json({ data: publicUser(user) });
 }
@@ -18,7 +18,8 @@ export async function usernameAvailable(req, res) {
 }
 const dummyHash = bcrypt.hashSync('not-a-real-password', 12);
 export async function login(req, res) {
-  const { username: loginName, password } = req.validated.body;
+  const { password } = req.validated.body;
+  const loginName = req.validated.body.username || req.validated.body.email;
   const user = await User.findOne(loginName.includes('@') ? { email: loginName.toLowerCase() } : { username: loginName.toLowerCase() }).select('+password');
   const valid = await bcrypt.compare(password, user?.password || dummyHash);
   if (!valid || !user?.active) throw new HttpError(401, 'Invalid username or password');
@@ -32,6 +33,10 @@ export async function logout(req, res) {
 }
 export async function profile(req, res) {
   req.user.name = req.validated.body.name;
+  const [firstName, ...lastName] = req.user.name.split(/\s+/);
+  req.user.firstName = firstName;
+  req.user.lastName = lastName.join(' ');
+  if (req.validated.body.phone !== undefined) req.user.phone = req.validated.body.phone;
   await req.user.save();
   res.json({ data: publicUser(req.user) });
 }
