@@ -1,221 +1,200 @@
-# Hostel Application Plan
+# HostelHub implementation and operations plan
 
-## Implementation Status (2026-10-01)
+## Current status — 2026-10-02
 
-The shared MERN API and core frontend flows are connected locally. Production hosting configuration and live Atlas/Cloudinary verification are still required; repository changes alone do not update deployed sites. See [DEPLOYMENT.md](DEPLOYMENT.md).
+HostelHub is deployed as two Vercel portals backed by one Render REST/Socket.IO service, one MongoDB Atlas database, and Cloudinary image storage.
 
-### Work completed and remaining
+### Production services
 
-Completed: the two portals now share one backend contract and Axios client; authentication, HTTP-only sessions, role guards, student search/details/favorites/profile, owner listings/photos/submission/profile, admin moderation/users/analytics, persistent conversations, Socket.IO updates, loading/error/empty states, Vercel SPA rewrites, production API-URL validation, deployment documentation, Docker support, backend contract tests, client configuration tests, and an isolated cross-portal browser test harness are in place.
+| Service | Source | Production URL | Purpose |
+| --- | --- | --- | --- |
+| Admin portal | `main/client` | `https://hostel-site-admin.vercel.app` | Administrator login, moderation, users, and analytics |
+| Owner/customer portal | `master/client` | `https://hostel-site-user.vercel.app` | Owner registration, property management, images, submission, profile, and messages |
+| Shared API | `main/server` | `https://hostel-site-u3kd.onrender.com/api` | Authentication, authorization, REST resources, uploads, and Socket.IO |
+| Database | MongoDB Atlas | Private connection string | Users, sessions, hostels, favorites, conversations, and messages |
+| Image storage | Cloudinary | Server-side integration | Original image files; MongoDB stores references and metadata |
 
-Remaining before release: choose and deploy the public API host from `main`; configure MongoDB Atlas network access and credentials, Cloudinary credentials, exact `CLIENT_URL` origins, proxy trust, and production cookie settings; set `VITE_API_URL`, `VITE_SOCKET_URL`, and the owner portal URL in both Vercel projects; rebuild both frontends; run the read-only deployment smoke check; and verify the authenticated student, owner, and admin flows against the live API, Atlas, Cloudinary, HTTPS cookies, and mobile layouts. Keep the shared backend and client modules synchronized between `main` and `master`.
+The `main` deployment is the admin portal and the `master` deployment is the owner/customer portal. The backend retains `STUDENT`, `OWNER`, and `ADMIN` role support and related API contracts from the original requirements, but there is no third Vercel project.
 
-### Session summary
+## How the deployed system works
 
-This session traced the deployment failures to a live owner bundle using `http://localhost:5000/api`, missing SPA rewrites, and incompatible username/email authentication contracts between the branches. The shared API was made compatible with both contracts, both portals were connected to the real API, mock student/owner/admin flows were replaced with persisted API-backed behavior, and production configuration now rejects unsafe or missing API URLs. Backend integration tests pass 5/5, client configuration tests pass, and both production builds pass. No production deployment or live database configuration was performed; the remaining release work is listed above.
+1. A browser downloads the appropriate React/Vite application from Vercel.
+2. The embedded `VITE_API_URL` sends REST requests to the Render API; `VITE_SOCKET_URL` connects real-time messaging to the same host.
+3. Render accepts credentialed requests only from the configured exact Vercel origins and requires the application request header on browser writes.
+4. Express validates request parameters and bodies with Zod, performs authentication and role/ownership checks, then reads or writes Atlas through Mongoose.
+5. Image uploads pass through Express validation and are stored in Cloudinary. Atlas stores image URLs, public IDs, ordering, and the selected cover.
+6. Socket.IO delivers live message events while MongoDB remains the durable message store.
 
-### Architecture and Branches
+### Authentication and authorization
 
-- `main`: student/admin frontend.
-- `master`: standalone owner frontend.
-- Keep `/server` identical across branches and deploy one API from `main`, with one MongoDB database.
-- Retain separate React/Vite clients, shared Axios request/session behavior, HTTP-only cookies and server-enforced role/ownership checks.
-- This backend targets one persistent Node process with both frontend origins explicitly allowed.
+- Passwords are hashed with bcrypt and are independent of `JWT_SECRET`.
+- A successful login creates a random session UUID in the MongoDB `sessions` collection.
+- The API signs a one-day HS256 JWT containing the user ID and session ID, then sends it as an HTTP-only, secure cookie.
+- Each protected request verifies the signature, algorithm, issuer, audience, expiry, matching database session, current user, and active status.
+- Roles are loaded from the current MongoDB user record; the API does not trust a role supplied by the browser or JWT payload.
+- Admin routes require the live database role `ADMIN`; owner routes require `OWNER`; hostel mutations also verify ownership.
+- Logout deletes the database session. Suspending an account deletes all of that user's sessions and disconnects its sockets.
+- Public registration can create allowed non-admin roles only. The first administrator is provisioned with `npm run create-admin` against Atlas.
 
-### Completed implementation
+Rotating `JWT_SECRET` invalidates existing cookies and requires users to sign in again. It does not change password hashes, delete accounts, or require re-registration.
 
-- [x] Shared email/username authentication contracts, legacy email-account compatibility and role-safe registration.
-- [x] Axios request layer, React session context, login/registration/logout, protected routes and expired-session handling on both portals.
-- [x] Student search/filtering/pagination, listing details, persisted favorites and profile updates.
-- [x] Owner listing creation/editing/deletion, real summary counts, profile updates and moderation feedback.
-- [x] Multipart photo upload, cover selection, ordering, deletion and draft submission controls.
-- [x] Admin moderation queues, approval/rejection/suspension/restoration, user management and database-backed analytics.
-- [x] Persistent conversations/replies on both portals, Socket.IO updates, history reload on reconnect, older history and visible-message read receipts.
-- [x] Loading, empty and error states instead of fabricated records; deferred pages state that features are unavailable.
-- [x] Vercel SPA rewrites and production build validation rejecting missing/local/insecure API URLs.
-- [x] Portable API Dockerfile, deployment runbook and read-only live smoke checker.
-- [x] Backend contract regressions and browser workflow test harness with isolated MongoDB.
+### Owner/customer listing lifecycle
 
-### Verification and remaining release work
+1. The owner registers or signs in through the `master` portal.
+2. The owner creates and edits a `DRAFT` listing.
+3. Images are uploaded to Cloudinary, reordered, deleted, and assigned a cover through protected owner endpoints.
+4. Submission changes the listing to `PENDING`.
+5. An administrator reviews it in the `main` portal and approves or rejects it through protected admin REST endpoints.
+6. Approval changes it to `APPROVED`; rejection records moderation feedback.
+7. Important owner edits return an approved/rejected listing to the review lifecycle.
+8. Admin suspension hides an approved listing. Admin restoration returns a suspended listing to `DRAFT` for review-safe editing.
 
-- Backend tests cover authentication, CSRF, role/owner isolation, moderation, favorites, chat, sockets and session revocation.
-- Browser tests exercise both frontends against one isolated real API/database; only the external Cloudinary storage boundary is stubbed.
-- Confirm the public API host, deploy the synchronized backend from main and configure both client build environments.
-- Configure Atlas network access for the API host, Cloudinary credentials, exact CLIENT_URL origins and production cookie settings.
-- Verify live Cloudinary uploads, Atlas connectivity, HTTPS cookies and deployed browser flows before calling the release complete.
-- Keep both shared backend and shared client modules synchronized in future changes.
+### Implemented REST API
 
-### Deferred Features
-
-Subscriptions/payments, reports, password reset/email verification, online presence, persistent moderation audit history, and distributed backend operation remain unimplemented. Any existing UI for these features is a placeholder and must not imply live functionality. Multiple backend replicas require shared Socket.IO coordination, shared rate limits, and cross-process session revocation.
-
-
-
-## Important Tech Stack Requirement
-
-Build this application using the MERN stack.
-
-### Frontend
-
-- React
-- Vite
-- JavaScript or TypeScript
-- Tailwind CSS
-- React Router
-- Axios
-- Context API or an appropriate lightweight state-management solution
-
-React is the frontend framework. Do not use Next.js or build the frontend as a server-rendered Next.js application.
-
-### Backend
-
-- Node.js
-- Express.js
-- REST API architecture
-- MongoDB
-- Mongoose
-
-The backend and frontend must be separate applications, with the recommended structure:
+Authentication and profiles:
 
 ```text
-/client
-/server
-```
-
-### Authentication
-
-Implement authentication using JWT, HTTP-only cookies, secure password hashing, and role-based authorization.
-
-Roles:
-
-- STUDENT
-- OWNER
-- ADMIN
-
-The backend must verify user roles on protected API routes. Never rely only on frontend route protection for security.
-
-### API
-
-Create clean REST API endpoints, including:
-
-```text
+GET    /api/auth/username-available
 POST   /api/auth/register
 POST   /api/auth/login
 POST   /api/auth/logout
 GET    /api/auth/me
+PATCH  /api/auth/me
+```
 
+Hostels, images, and favorites:
+
+```text
 GET    /api/hostels
 GET    /api/hostels/:id
 POST   /api/hostels
 PUT    /api/hostels/:id
 DELETE /api/hostels/:id
-
+GET    /api/owner/hostels
+GET    /api/owner/summary
+POST   /api/hostels/:id/submit
+POST   /api/hostels/:id/images
+PUT    /api/hostels/:id/images
+DELETE /api/hostels/:id/images
+GET    /api/favorites
 POST   /api/hostels/:id/favorite
 DELETE /api/hostels/:id/favorite
+```
 
-GET    /api/conversations
-POST   /api/conversations
-GET    /api/conversations/:id/messages
-POST   /api/conversations/:id/messages
+Administration:
 
+```text
 GET    /api/admin/hostels
 PATCH  /api/admin/hostels/:id/approve
 PATCH  /api/admin/hostels/:id/reject
 PATCH  /api/admin/hostels/:id/suspend
-
+PATCH  /api/admin/hostels/:id/restore
 GET    /api/admin/users
+PATCH  /api/admin/users/:id
 GET    /api/admin/analytics
 ```
 
-Keep controllers, routes, models, middleware, and services separated.
-
-### Real-Time Chat
-
-Use Socket.IO for real-time messaging between students and hostel owners. Support real-time messages, conversation lists, unread counts, timestamps, read status, online status where practical, and notifications.
-
-Store messages in MongoDB. Use Socket.IO only for real-time communication; MongoDB remains the persistent database.
-
-### Image Uploads
-
-Use Cloudinary or another configurable cloud image-storage provider. Do not store large image files directly inside MongoDB.
-
-Hostel owners must be able to upload multiple images, select a cover image, delete images, and reorder images. Validate file type, file size, and image count.
-
-### Frontend Routing
-
-Use React Router with role-protected routes:
+Persistent messaging:
 
 ```text
-/                       → Landing page
-/hostels                → Search hostels
-/hostels/:id            → Hostel details
-/favorites              → Student favorites
-/messages               → Student messages
-/profile                → Student profile
-
-/owner                  → Owner dashboard
-/owner/hostel           → Manage hostel
-/owner/messages         → Owner messages
-/owner/subscription     → Subscription
-/owner/profile          → Owner profile
-
-/admin                  → Admin dashboard
-/admin/hostels          → Manage hostels
-/admin/users            → Manage users
-/admin/reports          → Reports
-/admin/subscriptions    → Subscriptions
-/admin/analytics        → Analytics
+GET    /api/conversations
+POST   /api/conversations
+GET    /api/conversations/:id/messages
+POST   /api/conversations/:id/messages
+PATCH  /api/conversations/:id/read
 ```
 
-### React UI Requirements
+## Completed work
 
-The UI must be minimalist, modern, responsive, and commercial-quality. Use Tailwind CSS, reusable components, responsive layouts, clean cards and forms, simple navigation, consistent spacing, good typography, subtle animations, loading skeletons, empty states, error states, and toast notifications. Mobile responsiveness is mandatory.
+- [x] Shared Express/Mongoose REST API with separated routes, controllers, middleware, models, and services.
+- [x] Email/username-compatible authentication, bcrypt passwords, HTTP-only JWT cookies, database-backed sessions, logout, expiry, and revocation.
+- [x] Backend-enforced `STUDENT`, `OWNER`, and `ADMIN` authorization plus resource-ownership checks.
+- [x] Admin moderation queues, approve/reject/suspend/restore transitions, user suspension/restoration, and database-backed analytics.
+- [x] Owner registration, profile, summary, listing CRUD, photo management, submission, moderation feedback, and messaging.
+- [x] Search, listing details, favorites, profiles, and persistent conversations retained in the shared API contract.
+- [x] Socket.IO new-message delivery, unread counts, message history, pagination, and read receipts.
+- [x] Cloudinary upload boundary with magic-byte/type, file-size, count, ordering, cover, and deletion validation.
+- [x] Strict request validation, exact-origin credentialed CORS, browser-write origin/header protection, Helmet, rate limits, and consistent errors.
+- [x] Responsive React/Vite interfaces with protected routes and loading, empty, error, and session-expiry states.
+- [x] Vercel SPA rewrites and build-time rejection of missing, local, insecure, or malformed production API URLs.
+- [x] Render-compatible Node start path, Dockerfile, health check, graceful shutdown, proxy/cookie configuration, and optional DNS resolver override.
+- [x] DNS resolver configuration moved into the shared database module so API, seed, and `create-admin` entry points use it consistently.
+- [x] Deployment documentation, manual release guide, read-only production smoke checker, branch-consistency checker, and GitHub workflows.
+- [x] Shared backend and shared client modules synchronized between `main` and `master`.
 
-### Environment Variables
+## Verification completed
 
-Use environment variables for all secrets and provide a `.env.example` file.
+### Automated local verification
+
+- Backend integration suite passes 5/5, covering authentication, validation, CSRF-style browser write protection, role/owner isolation, moderation state transitions, favorites, chat, sockets, image validation, session revocation, and both portal contracts.
+- Both client configuration tests pass.
+- Both Vite production builds pass with a valid HTTPS API URL.
+- The isolated Playwright workflow passes across both portals, one temporary API, and one temporary MongoDB; only external Cloudinary storage is stubbed.
+- The branch-consistency check reports all declared shared backend/client files identical.
+
+### Production verification
+
+The read-only deployment checker passed all of the following on 2026-10-02:
 
 ```text
-VITE_API_URL=
-MONGODB_URI=
-JWT_SECRET=
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-CLIENT_URL=
+PASS API and database health
+PASS Credentialed CORS for https://hostel-site-admin.vercel.app
+PASS SPA deep links for https://hostel-site-admin.vercel.app
+PASS Built API URL for https://hostel-site-admin.vercel.app
+PASS Credentialed CORS for https://hostel-site-user.vercel.app
+PASS SPA deep links for https://hostel-site-user.vercel.app
+PASS Built API URL for https://hostel-site-user.vercel.app
 ```
 
-Never hard-code secrets.
+Additional live checks succeeded:
 
-### Development Requirements
+- Render `/api/health` returned HTTP 200 with Atlas connected.
+- Production admin login returned HTTP 200.
+- The secure session cookie survived the follow-up `/api/auth/me` request.
+- The authenticated browser reached `/admin` successfully.
+- `/api/admin/analytics` returned live Atlas-backed counts.
+- The production API correctly rejected a display name that was not an account username and accepted the administrator's registered email.
+- Atlas administrator creation succeeded through `npm run create-admin` after enabling the DNS resolver override.
 
-Create `/client` and `/server`, and provide `README.md` explaining:
+## Secrets and production configuration
 
-1. Installing dependencies
-2. Configuring MongoDB
-3. Configuring Cloudinary
-4. Configuring environment variables
-5. Starting the backend
-6. Starting the React frontend
-7. Seeding demo data
-8. Demo accounts
-9. API architecture
-10. Project structure
+- Production secrets belong in Render/Atlas/Cloudinary dashboards, never Git or Vercel `VITE_*` values.
+- Both Vercel projects use the same Render API URL.
+- Render `CLIENT_URL` must list the two exact production Vercel origins.
+- Unrelated Render/Vercel domains require secure cross-site cookies (`COOKIE_SAME_SITE=none`).
+- Run one backend instance until shared Socket.IO, rate-limit, and session coordination are implemented.
+- Any credential exposed during setup—including Atlas passwords, administrator passwords, and JWT secrets—must be rotated in the appropriate service before treating the release as secure.
+- Changing a Vercel build variable requires a new deployment; changing a Render runtime variable requires a restart/redeploy.
 
-Add proper error handling, backend validation, frontend form validation, loading states, and error states. The complete application must work end-to-end. Do not create only static frontend pages; connect the React frontend to the Express API and MongoDB.
+## Remaining production acceptance checks
 
-### Most Important User Flows
+The core deployment and REST authentication path are verified. These external boundaries should still be checked whenever credentials or deployments change:
 
-Build these three fully functional experiences before adding secondary features:
+- [ ] Upload, reorder, display, and delete genuine images using the production Cloudinary account.
+- [ ] Complete one live owner submission and admin approve/reject cycle after the final credential rotation.
+- [ ] Confirm production owner messaging and Socket.IO reconnect behavior in two real browsers.
+- [ ] Confirm the final rotated JWT, Atlas, Cloudinary, and administrator credentials are active and the exposed setup values are revoked.
+- [ ] Check primary screens on current mobile Safari/Chrome and desktop browsers, especially third-party-cookie behavior across unrelated domains.
 
-#### Student
+These are operational acceptance checks, not missing REST endpoints.
 
-Register/login → Search → Filter → View hostel → Save → Chat
+## Deferred features
 
-#### Owner
+The following are intentionally not presented as active functionality:
 
-Register/login → Create hostel → Upload images → Submit → Get approved → Receive messages → Reply
+- Payments and subscriptions.
+- Reports workflow.
+- Password reset and email verification.
+- Owner identity/document verification.
+- Online presence.
+- Persistent moderation audit history.
+- Safe horizontal backend scaling across multiple instances.
 
-#### Admin
+Multiple backend replicas will require shared Socket.IO coordination, shared rate limits, and cross-process session revocation before scaling beyond one instance.
 
-Login → Review listings → Approve/reject → Manage users → Manage hostels → View analytics
+## Operational references
+
+- [README.md](README.md) or `readme.md`: repository overview and local commands.
+- [DEPLOYMENT.md](DEPLOYMENT.md): technical deployment configuration.
+- [MANUAL_RELEASE_GUIDE.md](MANUAL_RELEASE_GUIDE.md): dashboard-by-dashboard owner checklist.
+- [server/README.md](server/README.md): API behavior and contracts.

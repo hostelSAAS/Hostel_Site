@@ -2,17 +2,17 @@
 
 A MERN hostel discovery and management application with separate React/Vite portals and one shared Express/Mongoose API.
 
-- `main`: student and administrator portal.
-- `master`: standalone owner portal.
+- `main`: administrator portal deployment.
+- `master`: owner/customer portal deployment.
 - Both frontends use the same backend and MongoDB database. Keep the shared backend synchronized.
 
-See [plan.md](plan.md) for implementation scope, [server/README.md](server/README.md) for API contracts, and [DEPLOYMENT.md](DEPLOYMENT.md) for production setup and verification.
+See [plan.md](plan.md) for implementation scope, [server/README.md](server/README.md) for API contracts, [DEPLOYMENT.md](DEPLOYMENT.md) for technical deployment details, and [MANUAL_RELEASE_GUIDE.md](MANUAL_RELEASE_GUIDE.md) for the ordered owner checklist.
 
 ## Local setup
 
 Use Node 22 or newer. In `server`, run `npm ci`, copy `.env.example` to `.env`, set `MONGODB_URI` and a random `JWT_SECRET` of at least 32 characters, and run `npm run dev`. Include both localhost frontend origins in `CLIENT_URL`.
 
-In each branch checkout, run `npm ci` inside `client`, copy its `.env.example` to `.env`, and run `npm run dev`. Use port 5173 for the student portal and `npm run dev -- --port 5174` for the owner portal. Both clients default to the local API on port 5000 in development.
+In each branch checkout, run `npm ci` inside `client`, copy its `.env.example` to `.env`, and run `npm run dev`. Use port 5173 for the admin checkout and `npm run dev -- --port 5174` for the owner/customer checkout. Both clients default to the local API on port 5000 in development.
 
 Configure Cloudinary on the API to enable real photo uploads. MongoDB stores records and image references, not image bytes.
 

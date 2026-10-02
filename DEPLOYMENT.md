@@ -1,13 +1,15 @@
 # Deploying the two HostelHub portals
 
+For the ordered dashboard-by-dashboard checklist intended for the release owner, use [MANUAL_RELEASE_GUIDE.md](MANUAL_RELEASE_GUIDE.md).
+
 The MERN architecture is unchanged: two React/Vite frontends call **one** Express API, which connects to **one** MongoDB database. MongoDB is not a browser-facing API. Backend files must stay identical on `main` and `master`.
 
 ## Deployment layout
 
 | Service | Branch | Root directory | Install / build | Start / output |
 | --- | --- | --- | --- | --- |
-| Student/admin frontend | `main` | `client` | `npm ci`, `npm run build` | `dist` |
-| Owner frontend | `master` | `client` | `npm ci`, `npm run build` | `dist` |
+| Admin frontend | `main` | `client` | `npm ci`, `npm run build` | `dist` |
+| Owner/customer frontend | `master` | `client` | `npm ci`, `npm run build` | `dist` |
 | Shared API | `main` | `server` | `npm ci --omit=dev` | `npm start` |
 
 Use Node 22 or newer. Deploy the API as one persistent Node service that supports WebSockets. A Docker alternative is included: build using `server` as the context (`docker build -t hostelhub-api ./server`). Configure runtime environment variables on the host; never bake a `.env` into the image. Scale to one instance until shared Socket.IO, rate-limit, and session coordination are implemented.
@@ -52,7 +54,7 @@ VITE_API_URL=https://<public-api-host>/api
 VITE_SOCKET_URL=https://<public-api-host>
 ```
 
-On the student/admin project also set `VITE_OWNER_PORTAL_URL=https://hostel-site-admin.vercel.app` (or the actual owner domain).
+On the admin (`main`) project also set `VITE_OWNER_PORTAL_URL=https://hostel-site-user.vercel.app` (or the actual owner/customer domain).
 
 Both projects must use the same API. Redeploy after changing variables: Vite embeds them into the JavaScript bundle. A production build deliberately fails when the API URL is missing, uses HTTP, points to localhost, contains credentials, or omits `/api`. This prevents the previous silent localhost deployment. Do not copy development `.env` values into production.
 
@@ -68,7 +70,7 @@ node scripts/check-deployment.mjs https://<public-api-host>/api https://hostel-s
 
 It checks MongoDB-backed API health, credentialed CORS for each origin, a direct `/profile` URL, and the API URL embedded in each frontend's entry bundle. It does not create accounts or write to the database. Passing it does not replace the authenticated browser workflow checks below.
 
-Verify student registration, search, favorites and chat; owner creation, real Cloudinary upload, submit and reply; and admin approval, suspension and analytics. Reload pages to confirm persistence. Open `/dashboard` on the owner site and `/admin` on the student site directly. Check session expiry and both mobile and desktop layouts.
+Verify owner registration, real Cloudinary upload, submission and replies; then verify admin approval, suspension and analytics. Reload pages to confirm persistence. Open `/dashboard` on the owner/customer site and `/admin` on the admin site directly. Check session expiry and both mobile and desktop layouts.
 
 Local integration checks:
 
@@ -82,7 +84,7 @@ npm run test:browser
 
 Browser tests start an isolated temporary MongoDB, one API and both Vite frontends. They never use your `.env`, real MongoDB, or Cloudinary credentials. Only the Cloudinary storage boundary is stubbed; the upload request, file validation, database writes, auth, REST and sockets run normally. Live Cloudinary/Atlas/HTTPS-cookie validation is still required after hosting configuration.
 
-The browser harness defaults to the owner checkout containing this file and the sibling `Hostel_Site_main` student checkout. Set `OWNER_WORKTREE` and `MAIN_WORKTREE` to absolute checkout paths when using another layout (including running from `main`). Install `client` dependencies in both checkouts first.
+The browser harness defaults to the owner checkout containing this file and the sibling `Hostel_Site_main` admin checkout. Set `OWNER_WORKTREE` and `MAIN_WORKTREE` to absolute checkout paths when using another layout (including running from `main`). Install `client` dependencies in both checkouts first.
 
 Run `npm test` in each client for production-URL checks. For a production build check, supply the intended HTTPS API URL through `VITE_API_URL`. Placeholder test URLs validate compilation only and must never be used for a live release.
 
