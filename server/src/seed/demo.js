@@ -5,14 +5,18 @@ import { env } from '../config/env.js';
 import { User, Hostel, Conversation, Message } from '../models/index.js';
 
 if (env.NODE_ENV === 'production') throw new Error('Demo seeding is disabled in production');
-const password = process.env.SEED_PASSWORD;
-if (!password || password.length < 10 || Buffer.byteLength(password) > 72) throw new Error('Set SEED_PASSWORD to 10-72 bytes');
+const password = process.env.SEED_PASSWORD || 'Password123!';
+if (password.length < 10 || Buffer.byteLength(password) > 72) throw new Error('SEED_PASSWORD must be 10-72 bytes');
 try {
   await connectDatabase();
   const accounts = {};
   for (const role of ['STUDENT', 'OWNER', 'ADMIN']) {
     const email = `${role.toLowerCase()}@example.com`;
-    accounts[role] = await User.findOne({ email }) || await User.create({ name: `Demo ${role.toLowerCase()}`, email, role, password: await bcrypt.hash(password, 12) });
+    accounts[role] = await User.findOneAndUpdate(
+      { email },
+      { $setOnInsert: { name: `Demo ${role.toLowerCase()}`, email, role, password: await bcrypt.hash(password, 12) }, $set: { username: role.toLowerCase() } },
+      { upsert: true, new: true, runValidators: true },
+    );
   }
   const owner = accounts.OWNER._id;
   let hostel = await Hostel.findOne({ owner, name: 'Demo Olive House' });
@@ -21,5 +25,5 @@ try {
   await User.updateOne({ _id: accounts.STUDENT._id }, { $addToSet: { favorites: hostel._id } });
   const conversation = await Conversation.findOneAndUpdate({ hostel: hostel._id, student: accounts.STUDENT._id }, { $setOnInsert: { owner } }, { upsert: true, new: true });
   if (!await Message.exists({ conversation: conversation._id })) await Message.create({ conversation: conversation._id, sender: accounts.STUDENT._id, recipient: owner, text: 'Is a room available for a visit this week?' });
-  console.log('Demo accounts: student@example.com, owner@example.com, admin@example.com. New accounts use SEED_PASSWORD; existing passwords are unchanged.');
+  console.log(`Demo accounts: student, owner, admin. Password: ${process.env.SEED_PASSWORD ? 'SEED_PASSWORD' : 'Password123!'}; existing passwords are unchanged.`);
 } finally { await mongoose.disconnect(); }

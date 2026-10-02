@@ -13,14 +13,17 @@ import * as chat from '../controllers/chat.js';
 
 export const router = Router();
 const text = max => z.string().trim().min(1).max(max);
+const optionalText = max => z.preprocess(value => typeof value === 'string' && value.trim() === '' ? undefined : value, text(max).optional());
 const email = z.email().max(254).transform(value => value.toLowerCase());
 const password = z.string().min(10).max(72).refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be at most 72 bytes');
 const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: { message: 'Too many authentication attempts' } } });
-router.post('/auth/register', authLimit, validate(z.object({ name: text(100), email, password, role: z.enum(['STUDENT', 'OWNER']).default('STUDENT') }).strict()), auth.register);
-router.post('/auth/login', authLimit, validate(z.object({ email, password: z.string().min(1).max(200) }).strict()), auth.login);
+const username = z.string().trim().toLowerCase().min(3).max(24).regex(/^[a-z0-9_]+$/, 'Use 3–24 letters, numbers, or underscores');
+router.get('/auth/username-available', authLimit, validate(z.object({ username }).strict(), 'query'), auth.usernameAvailable);
+router.post('/auth/register', authLimit, validate(z.object({ firstName: text(60).optional(), lastName: text(60).optional(), phone: text(30).optional(), name: text(100).optional(), username: username.optional(), email, password, role: z.enum(['STUDENT', 'OWNER']).default('STUDENT') }).strict().refine(data => data.name || (data.firstName && data.lastName), 'Supply a name or both first and last name').refine(data => Boolean(data.firstName) === Boolean(data.lastName), 'Supply both first and last name')) , auth.register);
+router.post('/auth/login', authLimit, validate(z.object({ username: z.string().trim().min(1).max(254).optional(), email: email.optional(), password: z.string().min(1).max(200) }).strict().refine(data => Boolean(data.username) !== Boolean(data.email), 'Supply either username or email')), auth.login);
 router.post('/auth/logout', authenticate, auth.logout);
 router.get('/auth/me', authenticate, (req, res) => res.json({ data: publicUser(req.user) }));
-router.patch('/auth/me', authenticate, validate(z.object({ name: text(100) }).strict()), auth.profile);
+router.patch('/auth/me', authenticate, validate(z.object({ name: text(100), phone: z.string().trim().max(30).optional() }).strict()), auth.profile);
 
 const hostelSchema = z.object({ name: text(150), description: text(5000), city: text(100), address: text(300), price: z.number().min(0).max(10000000), beds: z.number().int().min(0).max(10000), gender: z.enum(['MALE', 'FEMALE', 'ANY']).default('ANY'), amenities: z.array(text(80)).max(30).default([]) }).strict();
 const owner = [authenticate, roles('OWNER')];
@@ -29,6 +32,7 @@ const adminOnly = [authenticate, roles('ADMIN')];
 const validId = validate(z.object({ id }), 'params');
 router.get('/hostels', validate(pagination.extend({ city: text(100).optional(), q: text(100).optional(), gender: z.enum(['MALE', 'FEMALE', 'ANY']).optional(), minPrice: z.coerce.number().min(0).optional(), maxPrice: z.coerce.number().min(0).optional(), sort: z.enum(['newest', 'priceAsc', 'priceDesc']).default('newest') }).refine(value => value.minPrice === undefined || value.maxPrice === undefined || value.minPrice <= value.maxPrice, 'Invalid price range'), 'query'), hostels.list);
 router.get('/owner/hostels', ...owner, validate(pagination, 'query'), hostels.mine);
+router.get('/owner/summary', ...owner, hostels.summary);
 router.get('/favorites', ...student, validate(pagination, 'query'), hostels.favorites);
 router.get('/hostels/:id', validId, hostels.detail);
 router.post('/hostels', ...owner, validate(hostelSchema), hostels.create);
@@ -43,7 +47,7 @@ router.put('/hostels/:id/images', ...owner, validId, validate(z.object({ publicI
 router.delete('/hostels/:id/images', ...owner, validId, validate(z.object({ publicId: text(200) }).strict()), images.remove);
 
 router.get('/admin/hostels', ...adminOnly, validate(pagination.extend({ status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED']).optional() }), 'query'), admin.hostels);
-router.patch('/admin/hostels/:id/:action', ...adminOnly, validate(z.object({ id, action: z.enum(['approve', 'reject', 'suspend', 'restore']) }), 'params'), validate(z.object({ reason: text(1000).optional() }).strict()), admin.moderate);
+router.patch('/admin/hostels/:id/:action', ...adminOnly, validate(z.object({ id, action: z.enum(['approve', 'reject', 'suspend', 'restore']) }), 'params'), validate(z.object({ reason: optionalText(1000) }).strict()), admin.moderate);
 router.get('/admin/users', ...adminOnly, validate(pagination, 'query'), admin.users);
 router.patch('/admin/users/:id', ...adminOnly, validId, validate(z.object({ active: z.boolean() }).strict()), admin.setActive);
 router.get('/admin/analytics', ...adminOnly, admin.analytics);

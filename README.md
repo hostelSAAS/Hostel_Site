@@ -1,299 +1,31 @@
 # HostelHub
 
-> Backend implementation and authoritative setup/API instructions: [server/README.md](server/README.md). One shared Express API serves both branch frontends. Existing React screens still use mock data; API integration is the next phase. Demo passwords are supplied through `SEED_PASSWORD`, not the example credentials below.
+A MERN hostel discovery and management application with separate React/Vite portals and one shared Express/Mongoose API.
 
-HostelHub is a full-stack hostel discovery and management platform built with the MERN stack. Students can search, filter, save, and message hostel owners. Owners can publish and manage listings, while administrators review listings, manage users, and monitor platform analytics.
+- `main`: student and administrator portal.
+- `master`: standalone owner portal.
+- Both frontends use the same backend and MongoDB database. Keep the shared backend synchronized.
 
-## Core user experiences
+See [plan.md](plan.md) for implementation scope, [server/README.md](server/README.md) for API contracts, and [DEPLOYMENT.md](DEPLOYMENT.md) for production setup and verification.
 
-### Student
+## Local setup
 
-Register or log in → search and filter hostels → view details → save favorites → chat with owners.
+Use Node 22 or newer. In `server`, run `npm ci`, copy `.env.example` to `.env`, set `MONGODB_URI` and a random `JWT_SECRET` of at least 32 characters, and run `npm run dev`. Include both localhost frontend origins in `CLIENT_URL`.
 
-### Owner
+In each branch checkout, run `npm ci` inside `client`, copy its `.env.example` to `.env`, and run `npm run dev`. Use port 5173 for the student portal and `npm run dev -- --port 5174` for the owner portal. Both clients default to the local API on port 5000 in development.
 
-Register or log in → create a hostel listing → upload and organize images → submit for review → receive approval → receive and reply to messages.
+Configure Cloudinary on the API to enable real photo uploads. MongoDB stores records and image references, not image bytes.
 
-### Admin
+## Supported flows
 
-Log in → review listings → approve, reject, or suspend hostels → manage users and hostels → view analytics.
+Students can register/sign in, search and filter approved hostels, view details, save favorites, update profiles and message owners. Owners can manage multiple listings, upload and arrange photos, submit drafts for review and reply to students. Admins can review listings, manage users and view database-backed analytics. Sessions use HTTP-only cookies and all roles/ownership are checked by the backend.
 
-## Technology
+Subscriptions, payments, reports, verification emails, password reset, online presence and audit history are deferred; the interface does not imply these are active services.
 
-### Frontend
+## Checks and deployment
 
-- React with Vite
-- JavaScript or TypeScript
-- React Router
-- Tailwind CSS
-- Axios
-- Context API or another lightweight state manager
+Run `npm test` in `server` for isolated MongoDB integration tests and in `client` for production configuration tests. Browser workflow checks and their setup are documented in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-### Backend
+A production client build requires `VITE_API_URL=https://<public-api-host>/api`; missing, local or insecure values fail the build. Set Vercel Root Directory to `client` for both projects. Deploy `server` separately as one persistent Node process (or use its Dockerfile). Configure host secrets privately, then rebuild both frontends.
 
-- Node.js
-- Express.js
-- REST API
-- MongoDB with Mongoose
-- JWT authentication with HTTP-only cookies
-- Secure password hashing
-- Role-based authorization
-- Socket.IO for real-time chat
-- Cloudinary or another configurable cloud image provider
-
-The frontend and backend are separate applications in `/client` and `/server`.
-
-## Project structure
-
-```text
-.
-├── client/                    # React/Vite frontend
-│   ├── src/
-│   │   ├── components/        # Reusable UI components
-│   │   ├── context/           # Authentication and application state
-│   │   ├── layouts/           # Student, owner, and admin layouts
-│   │   ├── pages/             # Route-level pages
-│   │   ├── services/          # Axios clients and API services
-│   │   └── App.*
-│   └── package.json
-├── server/                    # Express/MongoDB backend
-│   ├── src/
-│   │   ├── config/            # Database and service configuration
-│   │   ├── controllers/       # Request handlers
-│   │   ├── middleware/        # Authentication, roles, errors, uploads
-│   │   ├── models/            # Mongoose models
-│   │   ├── routes/             # REST route definitions
-│   │   ├── services/          # Business logic and integrations
-│   │   ├── sockets/            # Socket.IO events and rooms
-│   │   ├── seed/               # Demo data and seed scripts
-│   │   └── app.*
-│   └── package.json
-├── .env.example
-├── plan.md
-└── README.md
-```
-
-The initial React frontend is implemented in `client/src` with a zinc-and-white visual system, responsive layouts, reusable cards and metrics, and route shells for student, owner, and admin experiences.
-
-## Prerequisites
-
-- Node.js 20 or newer
-- npm 10 or newer
-- A MongoDB database, local or hosted through MongoDB Atlas
-- A Cloudinary account, or credentials for another supported image provider
-
-## Installation
-
-Clone the repository and install dependencies for both applications:
-
-```bash
-git clone <repository-url>
-cd Hostel
-
-cd server
-npm install
-
-cd ../client
-npm install
-```
-
-## Environment configuration
-
-Create `server/.env` from the server example and `client/.env` from the client example.
-
-### `server/.env`
-
-```env
-NODE_ENV=development
-PORT=5000
-MONGODB_URI=mongodb://127.0.0.1:27017/hostelhub
-JWT_SECRET=replace-with-a-long-random-secret
-CLIENT_URL=http://localhost:5173
-
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_SECRET=your-api-secret
-```
-
-### `client/.env`
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-Never commit `.env` files or hard-code secrets. Use `.env.example` as the shareable template.
-
-## MongoDB setup
-
-1. Start a local MongoDB server, or create a MongoDB Atlas cluster.
-2. Create a database named `hostelhub` or use another database name in `MONGODB_URI`.
-3. If using Atlas, allow the development IP address and create a database user.
-4. Put the complete connection string in `server/.env`.
-
-## Cloudinary setup
-
-1. Create or sign in to a Cloudinary account.
-2. Find the cloud name, API key, and API secret in the dashboard.
-3. Add them to `server/.env`.
-4. Configure upload validation in the server so file type, size, and maximum image count are enforced.
-
-Images are stored in Cloudinary. MongoDB stores only the image URLs and their metadata, including order and cover-image selection.
-
-## Running the application
-
-Start the backend in one terminal:
-
-```bash
-cd server
-npm run dev
-```
-
-Start the frontend in another terminal:
-
-```bash
-cd client
-npm run dev
-```
-
-The client currently includes mock data so the interface can be reviewed before the Express API is connected. Replace the mock services with Axios calls to `VITE_API_URL` as backend endpoints are implemented.
-
-The default development URLs are:
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:5000`
-- API base: `http://localhost:5000/api`
-
-For production, build the client and start the server using the scripts defined in each package's `package.json`.
-
-## Demo data and accounts
-
-After configuring the server environment, run:
-
-```bash
-cd server
-npm run seed
-```
-
-The seed command should create demo users, approved and pending hostel listings, favorites, conversations, and messages.
-
-Recommended demo accounts:
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Student | `student@example.com` | `Password123!` |
-| Owner | `owner@example.com` | `Password123!` |
-| Admin | `admin@example.com` | `Password123!` |
-
-Change demo credentials before deploying to a shared or production environment.
-
-## Authentication and authorization
-
-The API authenticates users with JWTs stored in HTTP-only cookies. Passwords are hashed before storage. Protected backend routes verify both authentication and role permissions.
-
-Supported roles:
-
-- `STUDENT`
-- `OWNER`
-- `ADMIN`
-
-Frontend route guards improve the user experience, but backend middleware is the source of truth for access control.
-
-## REST API architecture
-
-The backend separates routes, controllers, services, models, and middleware.
-
-### Authentication
-
-```text
-POST /api/auth/register
-POST /api/auth/login
-POST /api/auth/logout
-GET  /api/auth/me
-```
-
-### Hostels
-
-```text
-GET    /api/hostels
-GET    /api/hostels/:id
-POST   /api/hostels
-PUT    /api/hostels/:id
-DELETE /api/hostels/:id
-POST   /api/hostels/:id/favorite
-DELETE /api/hostels/:id/favorite
-```
-
-### Conversations and messages
-
-```text
-GET  /api/conversations
-POST /api/conversations
-GET  /api/conversations/:id/messages
-POST /api/conversations/:id/messages
-```
-
-### Administration
-
-```text
-GET   /api/admin/hostels
-PATCH /api/admin/hostels/:id/approve
-PATCH /api/admin/hostels/:id/reject
-PATCH /api/admin/hostels/:id/suspend
-GET   /api/admin/users
-GET   /api/admin/analytics
-```
-
-All API responses should use consistent JSON structures and centralized error handling. Validation is required on both incoming request data and frontend forms.
-
-## Real-time chat
-
-Socket.IO provides live communication between students and owners. The server persists every message in MongoDB and uses Socket.IO for delivery, read-status updates, unread counts, notifications, and optional online presence.
-
-The client should load conversation history from the REST API, then join the appropriate Socket.IO conversation room for live updates.
-
-## Frontend routes
-
-```text
-/                       Landing page
-/hostels                Search hostels
-/hostels/:id            Hostel details
-/favorites              Student favorites
-/messages               Student messages
-/profile                Student profile
-
-/owner                  Owner dashboard
-/owner/hostel           Manage hostel
-/owner/messages         Owner messages
-/owner/subscription     Subscription
-/owner/profile          Owner profile
-
-/admin                  Admin dashboard
-/admin/hostels          Manage hostels
-/admin/users            Manage users
-/admin/reports          Reports
-/admin/subscriptions    Subscriptions
-/admin/analytics        Analytics
-```
-
-## UI standards
-
-The interface should remain minimalist and mobile-responsive, with reusable Tailwind components, consistent spacing, clear typography, clean cards and forms, subtle animations, loading skeletons, empty states, error states, and toast notifications.
-
-## Quality checklist
-
-- Frontend and backend run as separate applications.
-- MongoDB is used for persistent data.
-- Secrets are loaded through environment variables.
-- Passwords are securely hashed.
-- JWTs use HTTP-only cookies.
-- Backend routes enforce roles.
-- Hostel image files are stored outside MongoDB.
-- File type, size, and image-count limits are validated.
-- Chat messages persist in MongoDB and update in real time.
-- Forms include validation and useful error states.
-- Student, owner, and admin core flows work end-to-end.
-- Mobile layouts are tested.
-
-## License
-
-Add the project's chosen license here before public distribution.
+Run `node scripts/check-shared.mjs <owner-checkout> <main-checkout>` before publishing changes to verify that both branches contain the same backend and shared frontend modules. The manual Cross-portal browser verification workflow checks both selected branch refs together.

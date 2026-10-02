@@ -9,6 +9,7 @@ const schema = z.object({
   CLIENT_URL: z.string().min(1),
   COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  DNS_SERVERS: z.string().optional(),
 });
 export const env = schema.parse(process.env);
 export const origins = env.CLIENT_URL.split(',').map(value => new URL(value.trim()).origin);

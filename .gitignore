@@ -1,9 +1,8 @@
-.dummy
 node_modules/
 dist/
 .env
 .env.*
 !.env.example
-.ctx
-.claude
-.hidden
+.dummy
+test-results/
+playwright-report/

@@ -23,7 +23,7 @@ async function account(role, name) {
 }
 before(async () => {
   mongo = await MongoMemoryServer.create();
-  Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: mongo.getUri(), JWT_SECRET: 'test-secret-with-at-least-32-characters', CLIENT_URL: origin });
+  Object.assign(process.env, { NODE_ENV: 'test', MONGODB_URI: mongo.getUri(), JWT_SECRET: 'test-secret-with-at-least-32-characters', CLIENT_URL: `${origin},http://localhost:5174` });
   ({ User, Hostel, Session } = await import('../src/models/index.js'));
   const { connectDatabase } = await import('../src/config/database.js');
   await connectDatabase();
@@ -73,6 +73,10 @@ test('owner -> moderation -> search -> favorites -> private chat -> suspension',
   const created = await write(owner.agent, 'post', '/hostels', body);
   assert.equal(created.status, 201);
   const hostelId = created.body.data._id;
+  assert.equal((await owner.agent.get('/api/owner/hostels')).body.pagination.total, 1);
+  assert.equal((await owner.agent.get('/api/owner/summary')).body.data.hostels[0].count, 1);
+  assert.deepEqual((await outsider.agent.get('/api/owner/summary')).body.data.hostels, []);
+  assert.equal((await student.agent.get('/api/owner/summary')).status, 403);
   assert.equal((await request(app).get(`/api/hostels/${hostelId}`)).status, 404);
   assert.equal((await write(outsider.agent, 'put', `/hostels/${hostelId}`, body)).status, 403);
   assert.equal((await write(owner.agent, 'put', `/hostels/${hostelId}`, { ...body, status: 'APPROVED' })).status, 400);
@@ -80,15 +84,18 @@ test('owner -> moderation -> search -> favorites -> private chat -> suspension',
   await Hostel.updateOne({ _id: hostelId }, { $set: { images: [{ publicId: 'test/image', url: 'https://example.com/image.jpg' }], coverImage: 'test/image' } });
   assert.equal((await write(owner.agent, 'post', `/hostels/${hostelId}/submit`)).status, 200);
   assert.equal((await write(owner.agent, 'patch', `/admin/hostels/${hostelId}/approve`, {})).status, 403);
-  assert.equal((await write(admin.agent, 'patch', `/admin/hostels/${hostelId}/approve`, {})).status, 200);
+  assert.equal((await write(admin.agent, 'patch', `/admin/hostels/${hostelId}/approve`, { reason: '   ' })).status, 200);
   const search = await request(app).get('/api/hostels?city=lahore&maxPrice=25000');
   assert.equal(search.body.pagination.total, 1);
   assert.equal((await write(student.agent, 'post', `/hostels/${hostelId}/favorite`)).status, 204);
   assert.equal((await write(student.agent, 'post', `/hostels/${hostelId}/favorite`)).status, 204);
   assert.equal((await student.agent.get('/api/favorites')).body.data.length, 1);
+  assert.equal((await student.agent.get('/api/favorites')).body.pagination.total, 1);
+  assert.deepEqual((await student.agent.get('/api/auth/me')).body.data.favoriteIds, [hostelId]);
   const createdChat = await write(student.agent, 'post', '/conversations', { hostelId });
   assert.equal(createdChat.status, 201);
   const conversationId = createdChat.body.data._id;
+  assert.equal((await owner.agent.get('/api/conversations')).body.pagination.total, 1);
   assert.equal((await write(student.agent, 'post', '/conversations', { hostelId })).body.data._id, conversationId);
   assert.equal((await otherStudent.agent.get(`/api/conversations/${conversationId}/messages`)).status, 404);
   assert.equal((await write(outsider.agent, 'post', `/conversations/${conversationId}/messages`, { text: 'Spying' })).status, 404);
@@ -153,4 +160,40 @@ test('moderation transitions prevent bypassing rejection and suspension', async 
   assert.equal((await write(admin.agent, 'patch', `/admin/hostels/${hostelId}/restore`, {})).body.data.status, 'DRAFT');
   assert.equal((await write(owner.agent, 'put', `/hostels/${hostelId}`, body)).status, 200);
   assert.equal((await write(admin.agent, 'patch', `/admin/users/${admin.user.id}`, { active: false })).status, 403);
+});
+
+test('both portals share compatible auth, profile and origin contracts', async () => {
+  const agent = request.agent(app);
+  const registration = { username: 'New_Owner', firstName: 'New', lastName: 'Owner', phone: '03001234567', email: 'newowner@example.com', password, role: 'OWNER' };
+  assert.equal((await agent.get('/api/auth/username-available?username=New_Owner')).body.data.available, true);
+  const registered = await write(agent, 'post', '/auth/register', registration);
+  assert.equal(registered.status, 201, JSON.stringify(registered.body));
+  assert.equal(registered.body.data.username, 'new_owner');
+  assert.equal(registered.body.data.name, 'New Owner');
+  assert.equal((await agent.get('/api/auth/username-available?username=new_owner')).body.data.available, false);
+  await write(agent, 'post', '/auth/logout');
+  assert.equal((await write(agent, 'post', '/auth/login', { username: 'NEW_OWNER', password })).status, 200);
+  await write(agent, 'post', '/auth/logout');
+  assert.equal((await write(agent, 'post', '/auth/login', { email: 'NEWOWNER@example.com', password })).status, 200);
+  const updated = await write(agent, 'patch', '/auth/me', { name: 'Updated Owner', phone: '03123456789' });
+  assert.equal(updated.body.data.firstName, 'Updated');
+  assert.equal(updated.body.data.phone, '03123456789');
+  assert.equal((await write(agent, 'patch', '/auth/me', { name: 'Escalation', role: 'ADMIN' })).status, 400);
+  assert.equal((await write(agent, 'post', '/auth/login', { username: 'new_owner', email: registration.email, password })).status, 400);
+  assert.equal((await write(agent, 'post', '/auth/login', { password })).status, 400);
+  assert.equal((await write(agent, 'post', '/auth/register', { ...registration, email: 'different@example.com' })).status, 409);
+  // Legacy student registration must not assign colliding usernames from email prefixes.
+  for (const email of ['same@one.example', 'same@two.example']) {
+    const response = await write(agent, 'post', '/auth/register', { name: 'Legacy Student', email, password });
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+    assert.equal(response.body.data.role, 'STUDENT');
+    assert.equal(response.body.data.username, undefined);
+  }
+  assert.equal((await write(agent, 'post', '/auth/login', { username: 'same@one.example', password })).status, 200);
+  for (const allowed of [origin, 'http://localhost:5174']) {
+    const preflight = await request(app).options('/api/auth/login').set('Origin', allowed).set('Access-Control-Request-Method', 'POST').set('Access-Control-Request-Headers', 'content-type,x-requested-with');
+    assert.equal(preflight.headers['access-control-allow-origin'], allowed);
+    assert.equal(preflight.headers['access-control-allow-credentials'], 'true');
+  }
+  assert.equal((await request(app).options('/api/auth/login').set('Origin', 'https://evil.example').set('Access-Control-Request-Method', 'POST')).headers['access-control-allow-origin'], undefined);
 });
